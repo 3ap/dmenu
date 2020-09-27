@@ -16,7 +16,7 @@
 
 #include "drw.h"
 #include "util.h"
-#include "swc-client-protocol.h"
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 /* macros */
 #define INTERSECT(x,y,w,h,r)  (MAX(0, MIN((x)+(w),(r).x_org+(r).width)  - MAX((x),(r).x_org)) \
@@ -53,6 +53,7 @@ static struct item *prev, *curr, *next, *sel;
 static int mon = -1;
 
 static struct wl_display *dpy;
+static struct wl_output *output;
 static struct wl_compositor *compositor;
 static struct wl_keyboard *kbd;
 static struct wl_seat *seat;
@@ -61,9 +62,8 @@ static struct wl_surface *surface;
 static struct wl_data_device_manager *datadevman;
 static struct wl_data_device *datadev;
 static struct wl_data_offer *seloffer;
-static struct swc_screen *screen;
-static struct swc_panel_manager *panelman;
-static struct swc_panel *panel;
+static struct zwlr_layer_shell_v1 *layer_shell;
+static struct zwlr_layer_surface_v1 *layer_surface;
 static struct xkb xkb;
 
 static Drw *drw;
@@ -544,12 +544,10 @@ regglobal(void *d, struct wl_registry *r, uint32_t name, const char *interface, 
 		seat = wl_registry_bind(r, name, &wl_seat_interface, 1);
 	else if(strcmp(interface, "wl_data_device_manager") == 0)
 		datadevman = wl_registry_bind(r, name, &wl_data_device_manager_interface, 1);
-	else if(strcmp(interface, "swc_panel_manager") == 0)
-		panelman = wl_registry_bind(r, name, &swc_panel_manager_interface, 1);
-	else if (strcmp(interface, "swc_screen") == 0) {
-		if (mon != -1 && mon-- == 0)
-			screen = wl_registry_bind(r, name, &swc_screen_interface, 1);
-	}
+	else if (strcmp(interface, "wl_output") == 0)
+		output = wl_registry_bind(r, name, &wl_output_interface, 2);
+	else if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0)
+		layer_shell = wl_registry_bind(r, name, &zwlr_layer_shell_v1_interface, 1);
 }
 
 static void
@@ -663,19 +661,31 @@ static const struct wl_data_device_listener datadevlistener = {
 };
 
 static void
-paneldocked(void *d, struct swc_panel *panel, uint32_t length)
+layer_surface_configure(void *data, struct zwlr_layer_surface_v1 *layer_surface, uint32_t serial, uint32_t width, uint32_t height)
 {
-	mw = length;
+	mw = width;
+	zwlr_layer_surface_v1_ack_configure(layer_surface, serial);
 }
 
-static const struct swc_panel_listener panellistener = { paneldocked };
+static void
+layer_surface_closed(void *data, struct zwlr_layer_surface_v1 *layer_surface)
+{
+	zwlr_layer_surface_v1_destroy(layer_surface);
+	wl_surface_destroy(surface);
+	exit(1);
+}
+
+static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
+	.configure = layer_surface_configure,
+	.closed = layer_surface_closed,
+};
 
 static void
 setup(void)
 {
 	int j;
 
-	if (!compositor || !seat || !panelman)
+	if (!compositor || !seat || !layer_shell)
 		exit(1);
 
 	kbd = wl_seat_get_keyboard(seat);
@@ -696,10 +706,14 @@ setup(void)
 
 	/* create menu surface */
 	surface = wl_compositor_create_surface(compositor);
+	if (!(layer_surface = zwlr_layer_shell_v1_get_layer_surface(layer_shell, surface, output, ZWLR_LAYER_SHELL_V1_LAYER_TOP, "menu")))
+		exit(1);
 
-	panel = swc_panel_manager_create_panel(panelman, surface);
-	swc_panel_add_listener(panel, &panellistener, NULL);
-	swc_panel_dock(panel, topbar ? SWC_PANEL_EDGE_TOP : SWC_PANEL_EDGE_BOTTOM, screen, 1);
+	zwlr_layer_surface_v1_add_listener(layer_surface, &layer_surface_listener, NULL);
+	zwlr_layer_surface_v1_set_anchor(layer_surface, ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+	zwlr_layer_surface_v1_set_size(layer_surface, 0, mh);
+	zwlr_layer_surface_v1_set_keyboard_interactivity(layer_surface, true);
+	wl_surface_commit(surface);
 
 	wl_display_roundtrip(dpy);
 	if (!mw)

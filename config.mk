@@ -6,7 +6,6 @@ PREFIX = /usr/local
 MANPREFIX = $(PREFIX)/share/man
 
 PIXMANINC = /usr/include/pixman-1
-SWCPROTO = /usr/share/swc/swc.xml
 
 # includes and libs
 INCS = -I$(PIXMANINC)

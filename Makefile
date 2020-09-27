@@ -20,18 +20,26 @@ options:
 config.h:
 	cp config.def.h $@
 
-swc-protocol.c: $(SWCPROTO)
+xdg-shell-protocol.c: /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
 	@echo GEN $@
 	@wayland-scanner code < $< > $@
 
-swc-client-protocol.h: $(SWCPROTO)
+xdg-shell-client-protocol.h: /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
 	@echo GEN $@
 	@wayland-scanner client-header < $< > $@
 
-$(OBJ): arg.h config.h config.mk drw.h swc-client-protocol.h
+wlr-layer-shell-unstable-v1-protocol.c: wlr-layer-shell-unstable-v1.xml
+	@echo GEN $@
+	@wayland-scanner code < $< > $@
 
-dmenu: dmenu.o drw.o swc-protocol.o util.o
-	$(CC) -o $@ dmenu.o drw.o swc-protocol.o util.o $(LDFLAGS)
+wlr-layer-shell-unstable-v1-client-protocol.h: wlr-layer-shell-unstable-v1.xml
+	@echo GEN $@
+	@wayland-scanner client-header < $< > $@
+
+$(OBJ): arg.h config.h config.mk drw.h wlr-layer-shell-unstable-v1-client-protocol.h xdg-shell-client-protocol.h
+
+dmenu: dmenu.o drw.o wlr-layer-shell-unstable-v1-protocol.o util.o xdg-shell-protocol.o
+	$(CC) -o $@ dmenu.o drw.o wlr-layer-shell-unstable-v1-protocol.o xdg-shell-protocol.o util.o $(LDFLAGS)
 
 stest: stest.o
 	$(CC) -o $@ stest.o $(LDFLAGS)
