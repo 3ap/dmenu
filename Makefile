@@ -3,7 +3,7 @@
 
 include config.mk
 
-SRC = drw.c dmenu.c stest.c util.c
+SRC = drw.c dmenu.c stest.c panel-protocol.c util.c
 OBJ = $(SRC:.c=.o)
 
 all: options dmenu stest
@@ -20,10 +20,18 @@ options:
 config.h:
 	cp config.def.h $@
 
-$(OBJ): arg.h config.h config.mk drw.h
+swc-protocol.c: $(SWCPROTO)
+	@echo GEN $@
+	@wayland-scanner code < $< > $@
 
-dmenu: dmenu.o drw.o util.o
-	$(CC) -o $@ dmenu.o drw.o util.o $(LDFLAGS)
+swc-client-protocol.h: $(SWCPROTO)
+	@echo GEN $@
+	@wayland-scanner client-header < $< > $@
+
+$(OBJ): arg.h config.h config.mk drw.h swc-client-protocol.h
+
+dmenu: dmenu.o drw.o swc-protocol.o util.o
+	$(CC) -o $@ dmenu.o drw.o swc-protocol.o util.o $(LDFLAGS)
 
 stest: stest.o
 	$(CC) -o $@ stest.o $(LDFLAGS)
